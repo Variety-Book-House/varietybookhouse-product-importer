@@ -9,8 +9,8 @@ import { pythonLaunch } from './py.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PROJECT_ROOT = path.resolve(__dirname, '..')
-const SAM_SCRIPT = path.join(PROJECT_ROOT, 'crop_book.py')
-const SAM_MODEL = path.join(PROJECT_ROOT, 'sam_vit_b_01ec64.pth')
+const CROP_SCRIPT = path.join(PROJECT_ROOT, 'crop_book.py')
+const CROP_MODEL = process.env.BSI_CROP_MODEL?.trim() || 'isnet-general-use'
 
 export function sha256(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex')
@@ -19,9 +19,9 @@ export function sha256(buf) {
 async function runSamCrop(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     const { cmd, pre } = pythonLaunch()
-    const proc = spawn(cmd, [...pre, SAM_SCRIPT, inputPath, outputPath, SAM_MODEL], {
+    const proc = spawn(cmd, [...pre, CROP_SCRIPT, inputPath, outputPath, CROP_MODEL], {
       cwd: PROJECT_ROOT,
-      timeout: 180000,
+      timeout: 300000,
     })
     let stdout = ''
     let stderr = ''
@@ -31,9 +31,9 @@ async function runSamCrop(inputPath, outputPath) {
     proc.on('close', code => {
       if (code === 0) {
         try { resolve(JSON.parse(stdout.trim())) }
-        catch { reject(new Error(`SAM parse error: ${stdout}`)) }
+        catch { reject(new Error(`crop parse error: ${stdout}`)) }
       } else {
-        reject(new Error(`SAM failed (${code}): ${stderr || stdout}`))
+        reject(new Error(`crop failed (${code}): ${stderr || stdout}`))
       }
     })
   })
@@ -43,8 +43,8 @@ export async function cropWhiteBg(buffer) {
   const tmpDir = path.join(PROJECT_ROOT, 'job', 'tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
   const id = `${process.pid}-${crypto.randomUUID()}`
-  const inputPath = path.join(tmpDir, `sam-input-${id}.jpg`)
-  const outputPath = path.join(tmpDir, `sam-output-${id}.jpg`)
+  const inputPath = path.join(tmpDir, `crop-input-${id}.jpg`)
+  const outputPath = path.join(tmpDir, `crop-output-${id}.png`)
 
   try {
     await sharp(buffer).rotate().jpeg({ quality: 95 }).toFile(inputPath)
@@ -61,12 +61,12 @@ export async function cropWhiteBg(buffer) {
     } else {
       try {
         await runSamCrop(inputPath, outputPath)
-        if (!fs.existsSync(outputPath)) throw new Error('SAM exited without writing an output file')
+        if (!fs.existsSync(outputPath)) throw new Error('crop exited without writing an output file')
         croppedData = await sharp(outputPath).jpeg({ quality: 90 }).toBuffer()
         const info = await sharp(outputPath).metadata()
         croppedInfo = { width: info.width, height: info.height }
       } catch (e) {
-        console.warn(`SAM crop failed, falling back to trim: ${e.message}`)
+        console.warn(`crop failed, falling back to trim: ${e.message}`)
         const result = await sharp(buffer)
           .rotate()
           .trim({ threshold: 150 })
@@ -77,10 +77,8 @@ export async function cropWhiteBg(buffer) {
       }
     }
 
-    if (croppedInfo.width > croppedInfo.height) {
-      const rotated = await sharp(croppedData).rotate(90).jpeg({ quality: 90 }).toBuffer({ resolveWithObject: true })
-      return { buffer: rotated.data, width: rotated.info.width, height: rotated.info.height }
-    }
+    // No auto-rotation: blind 90° flips were turning already-correct (especially
+    // back-cover) crops on their side. The crop keeps the orientation it was shot in.
     return { buffer: croppedData, width: croppedInfo.width, height: croppedInfo.height }
   } finally {
     fs.rmSync(inputPath, { force: true })

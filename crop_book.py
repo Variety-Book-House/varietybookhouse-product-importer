@@ -1,103 +1,83 @@
 #!/usr/bin/env python3
 import cv2
 import sys
-import os
 import json
-from segment_anything import sam_model_registry, SamAutomaticMaskGenerator
+import numpy as np
+from PIL import Image
+from rembg import remove, new_session
 
-def crop_book(input_path, output_path, model_path="sam_vit_b_01ec64.pth"):
-    img = cv2.imread(input_path)
-    if img is None:
-        raise ValueError(f"Could not read image: {input_path}")
+MODEL_NAME = "isnet-general-use"
 
-    h, w = img.shape[:2]
-    
-    # Resize for faster SAM processing (max 1024px on longest side)
-    scale = 1024 / max(h, w)
-    if scale < 1.0:
-        new_w, new_h = int(w * scale), int(h * scale)
-        img_small = cv2.resize(img, (new_w, new_h))
-    else:
-        scale = 1.0
-        img_small = img
-        new_w, new_h = w, h
+# isnet is a *salient object* segmenter, so on a busy cover it can return the
+# cover artwork instead of the physical book. A book that fills less than this
+# fraction of the frame is implausible on its own; below it we widen to the
+# convex hull of all foreground, which recovers the printed features (title,
+# blurb) that span the real book edges.
+MIN_BOOK_FRACTION = 0.10
 
-    sam = sam_model_registry["vit_b"](checkpoint=model_path)
-    sam.to("cpu")
 
-    mask_generator = SamAutomaticMaskGenerator(
-        sam,
-        min_mask_region_area=2000,
-        pred_iou_thresh=0.88,
-        stability_score_thresh=0.95,
-    )
+def crop_book(input_path, output_path, model_name=MODEL_NAME):
+    img = Image.open(input_path).convert("RGB")
+    arr = np.array(img)
+    h, w = arr.shape[:2]
+    total = w * h
 
-    masks = mask_generator.generate(img_small)
-    if not masks:
-        raise ValueError("No masks found")
+    session = new_session(model_name)
+    m = np.array(remove(img, session=session, only_mask=True))
 
-    total_area = new_h * new_w
+    # Largest external blob: RETR_EXTERNAL already ignores interior holes, so a
+    # barcode sticker punched out of the book does not split the contour.
+    _, thresh = cv2.threshold(m, 127, 255, cv2.THRESH_BINARY)
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        raise ValueError("No foreground found")
 
-    # Find book-like mask: not background, portrait aspect, doesn't span full width/height
-    best = None
-    for m in masks:
-        ratio = m["area"] / total_area
-        bx, by, bw, bh = m["bbox"]
-        aspect = bh / bw if bw > 0 else 0
+    c = max(contours, key=cv2.contourArea)
+    area = cv2.contourArea(c)
+    if area < total * 0.001:
+        raise ValueError(f"Foreground too small ({area:.0f}px of {total}px)")
 
-        touches_left = bx <= 2
-        touches_right = bx + bw >= new_w - 2
-        touches_top = by <= 2
-        touches_bottom = by + bh >= new_h - 2
-        spans_full_width = touches_left and touches_right
-        spans_full_height = touches_top and touches_bottom
+    # The hull has to be tried BEFORE giving up on a small mask: isnet returns the
+    # salient artwork, so on a plain cover the largest blob alone is a fraction of
+    # the frame while the hull of every blob spans the real book edges.
+    if area < total * MIN_BOOK_FRACTION:
+        floor = max(24.0, total * 0.00005)
+        pieces = [x for x in contours if cv2.contourArea(x) >= floor]
+        if len(pieces) > 1:
+            c = cv2.convexHull(np.vstack(pieces))
 
-        # Book criteria: decent size, portrait, not spanning full width/height
-        if ratio > 0.05 and ratio < 0.65 and aspect > 1.2 and not spans_full_width and not spans_full_height:
-            if best is None or m["area"] > best["area"]:
-                best = m
+    hull_area = cv2.contourArea(c)
+    if hull_area < total * 0.02:
+        raise ValueError(f"Book hull too small ({hull_area:.0f}px of {total}px)")
 
-    if best is None:
-        # Fallback: largest non-background mask
-        for m in masks:
-            ratio = m["area"] / total_area
-            if ratio < 0.85:
-                if best is None or m["area"] > best["area"]:
-                    best = m
-        if best is None:
-            raise ValueError("No suitable mask found")
+    # Axis-aligned bounding box only — NO rotation, NO perspective warp. These are
+    # upright phone photos; the old deskew turned mask noise into a fake tilt and
+    # visibly ROTATED the cover (back covers worst — the sticker strip poisons the
+    # minAreaRect quad). A genuinely tilted book just keeps some background in the
+    # corners instead of coming back rotated.
+    x, y, bw, bh = cv2.boundingRect(c)
+    x1, y1 = max(0, int(x)), max(0, int(y))
+    x2, y2 = min(w, int(x + bw)), min(h, int(y + bh))
+    if x2 - x1 < 2 or y2 - y1 < 2:
+        raise ValueError("Degenerate bounding box crop")
+    out = arr[y1:y2, x1:x2]
 
-    # Scale bbox back to original image coordinates
-    x, y, w_box, h_box = map(int, best["bbox"])
-    if scale < 1.0:
-        x = int(x / scale)
-        y = int(y / scale)
-        w_box = int(w_box / scale)
-        h_box = int(h_box / scale)
+    # PNG so the Node side can re-encode to JPEG q90 without a second lossy pass
+    Image.fromarray(out).save(output_path)
+    return {"x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1}
 
-    # Add padding
-    pad = 20
-    x = max(0, x - pad)
-    y = max(0, y - pad)
-    w_box = min(img.shape[1] - x, w_box + 2 * pad)
-    h_box = min(img.shape[0] - y, h_box + 2 * pad)
-
-    crop = img[y:y+h_box, x:x+w_box]
-    cv2.imwrite(output_path, crop)
-
-    return {"x": int(x), "y": int(y), "width": int(w_box), "height": int(h_box)}
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python crop_book.py <input> <output> [model_path]")
+        print("Usage: python crop_book.py <input> <output> [model_name]")
         sys.exit(1)
 
     input_path = sys.argv[1]
     output_path = sys.argv[2]
-    model_path = sys.argv[3] if len(sys.argv) > 3 else "sam_vit_b_01ec64.pth"
+    model_name = sys.argv[3] if len(sys.argv) > 3 else MODEL_NAME
 
     try:
-        result = crop_book(input_path, output_path, model_path)
+        result = crop_book(input_path, output_path, model_name)
         print(json.dumps(result))
     except Exception as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)

@@ -1,11 +1,13 @@
 import 'dotenv/config'
 import http from 'node:http'
-import { readFile, writeFile, rename, stat, mkdir, readdir } from 'node:fs/promises'
+import { readFile, writeFile, rename, stat, mkdir, readdir, copyFile } from 'node:fs/promises'
 import { createReadStream, existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getProgress } from './progress.mjs'
 import { pythonLaunch } from './py.mjs'
+import { enrichBook, llmStatus, enrichDefaults } from './enrich.mjs'
+import { isValidIsbn } from './match.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const defaultJobDir = path.resolve(here, '..', 'job')
@@ -84,6 +86,7 @@ const IMAGE_EXT = /\.(jpe?g|png|webp|heic)$/i
 
 let jobInProgress = false
 let ocrCheckPromise = null
+let llmCheckPromise = null
 
 function defaultChecks() {
   return {
@@ -97,7 +100,7 @@ function defaultChecks() {
           )
           if (missing.length) return { ok: false, missing }
           const { cmd: pyCmd, pre: pyPre } = pythonLaunch()
-          const probe = spawnSync(pyCmd, [...pyPre, '-c', 'import zxingcpp, cv2, easyocr, indic_transliteration'], { timeout: 60000 })
+          const probe = spawnSync(pyCmd, [...pyPre, '-c', 'import zxingcpp, cv2, easyocr, indic_transliteration, rembg'], { timeout: 60000 })
           if (probe.status !== 0) {
             return { ok: false, error: String(probe.stderr ?? '').slice(-300) || 'python imports failed' }
           }
@@ -119,6 +122,14 @@ function defaultChecks() {
     r2: () => {
       const required = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET', 'R2_PUBLIC_URL']
       return { ok: required.every((name) => process.env[name]) }
+    },
+    llm: () => {
+      if (!llmCheckPromise) {
+        llmCheckPromise = llmStatus().finally(() => {
+          setTimeout(() => { llmCheckPromise = null }, 15000)
+        })
+      }
+      return llmCheckPromise
     },
   }
 }
@@ -181,6 +192,14 @@ async function handleBookAction(req, res, ctx, key, action) {
   if (!book) throw httpError(`book not found: ${key}`, 404)
   const body = await readJsonBody(req)
 
+  if (action === 'enrich') {
+    if (!isValidIsbn(book.isbn)) throw httpError('book has no ISBN to look up', 400)
+    const enrich = await enrichBook(book)
+    book.enrich = enrich
+    await saveState(ctx.jobDir, state)
+    return sendJson(res, 200, { ok: true, book })
+  }
+
   if (action === 'confirm') {
     const productId = typeof body.productId === 'string' ? body.productId.trim() : ''
     if (!productId) throw httpError('productId (string) is required', 400)
@@ -211,7 +230,15 @@ async function handleBookAction(req, res, ctx, key, action) {
   let id
   try {
     const { createProduct } = await import('./db.mjs')
-    const created = await createProduct({ title, author, mrp, isbn, images: [], thumbnails: [] })
+    const created = await createProduct({
+      title,
+      author,
+      mrp,
+      isbn,
+      genres: book.enrich?.genres ?? [],
+      images: [],
+      thumbnails: [],
+    })
     id = typeof created === 'string' ? created : created?.id ?? created
   } catch (err) {
     throw httpError(`createProduct failed: ${err.message}`, 502)
@@ -220,7 +247,17 @@ async function handleBookAction(req, res, ctx, key, action) {
   book.createdProductId = String(id)
   book.status = 'created'
   await saveState(ctx.jobDir, state)
-  return sendJson(res, 200, { ok: true, book })
+  // the product now exists in Postgres; fold it into the catalogue snapshot too so
+  // /api/search and later scans can match against it without re-running the snapshot script
+  let catalogueError = null
+  try {
+    const { appendCatalogue } = await import('./db.mjs')
+    await appendCatalogue({ id: String(id), title, author, mrp, isbn })
+  } catch (err) {
+    catalogueError = err.message
+    console.error(`catalogue append failed for product ${id}: ${err.message}`)
+  }
+  return sendJson(res, 200, { ok: true, book, ...(catalogueError ? { catalogueError } : {}) })
 }
 
 async function handle(req, res, ctx) {
@@ -262,9 +299,129 @@ async function handle(req, res, ctx) {
     return sendJson(res, 200, { ok: true, sha, source })
   }
 
+  if (req.method === 'POST' && (m = p.match(/^\/api\/image\/([a-f0-9]{64})\/position$/))) {
+    const sha = m[1].toLowerCase()
+    const body = await readJsonBody(req)
+    const raw = body.position
+    if (raw !== 'front' && raw !== 'back' && raw !== 'auto') throw httpError("position must be 'front', 'back' or 'auto'", 400)
+    const { JobState } = await import('./state.mjs')
+    const { recomputeBookForImage } = await import('./pipeline.mjs')
+    const jobState = new JobState(ctx.jobDir).load()
+    const img = jobState.getImage(sha)
+    if (!img) throw httpError('image not found', 404)
+    img.positionOverride = raw === 'auto' ? null : raw
+    const bookKey = recomputeBookForImage(jobState, sha)
+    jobState.save()
+    return sendJson(res, 200, { ok: true, sha, position: raw, bookKey })
+  }
+
+  if (req.method === 'POST' && (m = p.match(/^\/api\/image\/([a-f0-9]{64})\/crop$/))) {
+    const sha = m[1].toLowerCase()
+    const body = await readJsonBody(req)
+    const { JobState } = await import('./state.mjs')
+    const sharp = (await import('sharp')).default
+    const jobState = new JobState(ctx.jobDir).load()
+    const img = jobState.getImage(sha)
+    if (!img) throw httpError('image not found', 404)
+    const cropsDir = path.join(ctx.jobDir, 'crops')
+    const cropPath = path.join(cropsDir, `${sha}.jpg`)
+    const autoPath = path.join(cropsDir, `${sha}.auto.jpg`)
+
+    if (body.reset === true) {
+      if (!img.manualCrop) throw httpError('no manual crop to reset', 400)
+      let restored = false
+      try {
+        await stat(autoPath)
+        await copyFile(autoPath, cropPath)
+        const info = await sharp(cropPath).metadata()
+        jobState.setImage(sha, { manualCrop: null, dims: { width: info.width, height: info.height } })
+        restored = true
+      } catch {
+        jobState.setImage(sha, { manualCrop: null })
+      }
+      jobState.save()
+      return sendJson(res, 200, { ok: true, sha, manualCrop: null, restored, v: Date.now() })
+    }
+
+    const origPath = path.join(ctx.jobDir, 'originals', `${sha}.jpg`)
+    let ow, oh
+    try {
+      const info = await sharp(origPath).metadata()
+      ow = info.width
+      oh = info.height
+      // a browser auto-rotates by EXIF; mirror that so fractions match what the UI shows
+      const swap = info.orientation >= 5 && info.orientation <= 8
+      if (swap) [ow, oh] = [oh, ow]
+    } catch {
+      throw httpError('original image not found — run the scan pipeline first', 404)
+    }
+    const fr = ['x0', 'y0', 'x1', 'y1'].map((k) => Number(body[k]))
+    if (fr.some((v) => !Number.isFinite(v))) throw httpError('x0, y0, x1, y1 (0..1 fractions) are required', 400)
+    const clamp01 = (v) => Math.min(Math.max(v, 0), 1)
+    const fx0 = clamp01(Math.min(fr[0], fr[2]))
+    const fx1 = clamp01(Math.max(fr[0], fr[2]))
+    const fy0 = clamp01(Math.min(fr[1], fr[3]))
+    const fy1 = clamp01(Math.max(fr[1], fr[3]))
+    const left = Math.round(fx0 * ow)
+    const top = Math.round(fy0 * oh)
+    let width = Math.round(fx1 * ow) - left
+    let height = Math.round(fy1 * oh) - top
+    if (width < 16 || height < 16) throw httpError('crop too small (min 16px)', 400)
+    width = Math.min(width, ow - left)
+    height = Math.min(height, oh - top)
+    await mkdir(cropsDir, { recursive: true })
+    // keep the auto crop recoverable: first manual crop backs it up once
+    try {
+      await stat(cropPath)
+      await stat(autoPath).catch(async () => { await copyFile(cropPath, autoPath) })
+    } catch { /* no existing crop to back up */ }
+    const tmp = `${cropPath}.tmp-${process.pid}`
+    // .rotate() FIRST so extract runs in the EXIF-upright space the UI preview shows
+    await sharp(origPath)
+      .rotate()
+      .extract({ left, top, width, height })
+      .jpeg({ quality: 90 })
+      .toFile(tmp)
+    await rename(tmp, cropPath)
+    const manualCrop = { x0: left / ow, y0: top / oh, x1: (left + width) / ow, y1: (top + height) / oh }
+    jobState.setImage(sha, { manualCrop, dims: { width, height } })
+    jobState.save()
+    return sendJson(res, 200, { ok: true, sha, manualCrop, dims: { width, height }, v: Date.now() })
+  }
+
+  if (req.method === 'POST' && (m = p.match(/^\/api\/image\/([a-f0-9]{64})\/split$/))) {
+    const sha = m[1].toLowerCase()
+    const body = await readJsonBody(req)
+    const action = body.action
+    if (action !== 'out' && action !== 'merge') throw httpError("action must be 'out' or 'merge'", 400)
+    const { JobState } = await import('./state.mjs')
+    const { splitImage, matchBooks } = await import('./pipeline.mjs')
+    const jobState = new JobState(ctx.jobDir).load()
+    const img = jobState.getImage(sha)
+    if (!img) throw httpError('image not found', 404)
+    if (img.status === 'committed') throw httpError('image is already committed', 409)
+    if (action === 'out') {
+      if (img.splitKey) throw httpError('image is already split into its own book', 409)
+      const keys = splitImage(jobState, sha, `s:${sha.slice(0, 12)}`)
+      if (keys.length === 0) throw httpError('image is not part of a detected book yet', 400)
+      jobState.save()
+      await matchBooks(jobState, { dryRun: jobState.dryRun, keys })
+      jobState.save()
+      return sendJson(res, 200, { ok: true, sha, action, keys })
+    }
+    if (!img.splitKey) throw httpError('image is not split', 400)
+    const staleKey = img.splitKey
+    const keys = splitImage(jobState, sha, null)
+    if (!keys.includes(staleKey)) keys.push(staleKey)
+    jobState.save()
+    await matchBooks(jobState, { dryRun: jobState.dryRun, keys })
+    jobState.save()
+    return sendJson(res, 200, { ok: true, sha, action, keys })
+  }
+
   if (req.method === 'GET' && p === '/api/state') {
     const state = await loadState(ctx.jobDir)
-    const [ocr, db, r2] = await Promise.all([ctx.checks.ocr(), ctx.checks.db(), ctx.checks.r2()])
+    const [ocr, db, r2, llm] = await Promise.all([ctx.checks.ocr(), ctx.checks.db(), ctx.checks.r2(), ctx.checks.llm()])
     const books = Object.values(state.books).sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
     return sendJson(res, 200, {
       folder: state.folder ?? null,
@@ -272,6 +429,8 @@ async function handle(req, res, ctx) {
       ocr,
       db,
       r2,
+      llm,
+      enrichModel: enrichDefaults().model,
       counts: computeCounts(state),
       progress: getProgress(),
       books,
@@ -279,7 +438,7 @@ async function handle(req, res, ctx) {
     })
   }
 
-  if (req.method === 'POST' && (m = p.match(/^\/api\/book\/([^/]+)\/(confirm|dismiss|create)$/))) {
+  if (req.method === 'POST' && (m = p.match(/^\/api\/book\/([^/]+)\/(confirm|dismiss|create|enrich)$/))) {
     return handleBookAction(req, res, ctx, decodeURIComponent(m[1]), m[2])
   }
 
@@ -329,6 +488,29 @@ async function handle(req, res, ctx) {
     return sendJson(res, 200, result)
   }
 
+  if (req.method === 'GET' && p === '/api/search') {
+    const q = (url.searchParams.get('q') || '').trim().toLowerCase()
+    if (q.length < 2) throw httpError('q (2+ chars) is required', 400)
+    let products
+    try {
+      const { fetchProducts } = await import('./db.mjs')
+      products = await fetchProducts()
+    } catch (e) {
+      throw httpError(`catalogue unavailable: ${e.message}`, 502)
+    }
+    const terms = q.split(/\s+/).filter(Boolean)
+    const hits = []
+    for (const p2 of products) {
+      const hay = `${p2.title ?? ''} ${p2.author ?? ''} ${String(p2.isbn ?? '').replace(/[^0-9x]/gi, '')}`
+        .toLowerCase()
+      if (terms.every((t) => hay.includes(t))) {
+        hits.push({ id: p2.id, title: p2.title ?? '', author: p2.author ?? '', mrp: p2.mrp, isbn: p2.isbn ?? '' })
+        if (hits.length >= 25) break
+      }
+    }
+    return sendJson(res, 200, { products: hits })
+  }
+
   if (req.method === 'POST' && p === '/api/start-job') {
     if (jobInProgress) throw httpError('a job is already running', 409)
     jobInProgress = true
@@ -372,6 +554,22 @@ async function handle(req, res, ctx) {
       }
 
       return sendJson(res, 200, { ok: true, folder, imageCount: images.length })
+    } finally {
+      jobInProgress = false
+    }
+  }
+
+  if (req.method === 'POST' && p === '/api/stop-job') {
+    if (jobInProgress) throw httpError('a job is already running', 409)
+    jobInProgress = true
+    try {
+      const state = await loadState(ctx.jobDir)
+      state.stopRequested = true
+      await saveState(ctx.jobDir, state)
+      return sendJson(res, 200, { ok: true })
+    } catch (e) {
+      console.error('stop job error:', e)
+      throw httpError('failed to stop job: ' + e.message, 500)
     } finally {
       jobInProgress = false
     }

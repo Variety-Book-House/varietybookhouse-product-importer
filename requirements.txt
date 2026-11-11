@@ -1,3 +1,40 @@
-zxing-cpp==3.1.1
-easyocr==1.7.2
-indic-transliteration==2.3.82
+# Python dependencies for crop_book.py (book cover cropping).
+#
+#   pip install -r requirements.txt
+#
+# Only this one script needs Python. If you never run it, the Node pipeline
+# still works and falls back to a plain white-border trim (much worse crops —
+# it only trims white, so it cannot deskew or handle non-white backgrounds).
+#
+# The rembg model is NOT listed here — it is a ~176 MB download, not a package.
+# rembg caches it under ~/.u2net on first use (needs network once), then runs
+# fully offline. Override the model with BSI_CROP_MODEL if you want a different
+# one (e.g. "birefnet-general" for a sharper, slower model).
+
+# --- Image I/O, warping and mask geometry ------------------------------------
+# crop_book.py uses only headless cv2 calls — no GUI windows.
+# Verified working version on macOS (Python 3.14): opencv-python 5.0.0.
+#
+# On a headless server (Docker, no X11) replace this line with
+#   opencv-python-headless>=4.8
+# which drops the GUI/Qt bindings and avoids the missing-libGL.so.1 failure.
+# Do NOT install both — they conflict.
+opencv-python>=4.8
+
+# --- rembg -------------------------------------------------------------------
+# Background removal -> grayscale mask -> largest external contour ->
+# minAreaRect -> perspective warp. "isnet-general-use" is the default.
+# The plain "rembg" wheel has NO inference backend and raises at new_session();
+# the [cpu] extra pulls onnxruntime (CPU). For NVIDIA use [gpu] instead.
+rembg[cpu]>=2.0.60
+
+# --- NumPy ABI --------------------------------------------------------------
+# crop_book.py imports numpy directly (mask -> contour -> warp). rembg, cv2 and
+# torch all touch numpy too, and older torch wheels are compiled against 1.x.
+# With numpy 2.x on such a build you get:
+#     UserWarning: Failed to initialize NumPy: _ARRAY_API not found
+# which imports fine but CRASHES at runtime. On Python 3.12+ torch wheels are
+# numpy-2-ready, so the marker leaves them alone. If pip reports a conflict,
+# pin opencv to match:
+#     pip install "numpy<2" "opencv-python<5"
+numpy<2; python_version < "3.12"

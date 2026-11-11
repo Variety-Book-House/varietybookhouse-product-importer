@@ -24,6 +24,7 @@ vi.mock('../src/image.mjs', () => ({
 const { commitConfirmed } = await import('../src/commit.mjs')
 const { commitBook } = await import('../src/db.mjs')
 const { putIfMissing } = await import('../src/r2.mjs')
+const { mergeGenres, mergePairs } = await vi.importActual('../src/db.mjs')
 
 const FRONT_SHA = 'a'.repeat(64)
 const BACK_SHA = 'b'.repeat(64)
@@ -149,5 +150,77 @@ describe('commit.mjs progress', () => {
     await commitConfirmed({ state, progress })
     expect(getProgress().done).toBe(false)
     expect(getProgress().current).toBe(2)
+  })
+
+  it('passes genres from book.enrich to commitBook', async () => {
+    const state = await makeState(jobDir)
+    state.setBook('dune', { enrich: { genres: ['Fiction', 'Religion'] } })
+    await commitConfirmed({ state })
+    expect(commitBook).toHaveBeenCalledWith(
+      expect.objectContaining({ productId: 'p-1', genre: ['Fiction', 'Religion'] }),
+    )
+  })
+})
+
+describe('mergeGenres', () => {
+  it('merges existing and incoming genres, deduping case-insensitively', () => {
+    expect(mergeGenres(['Fiction', 'Religion'], ['fiction', 'Science'])).toEqual([
+      'Fiction',
+      'Religion',
+      'Science',
+    ])
+  })
+
+  it('tolerates missing arrays', () => {
+    expect(mergeGenres(undefined, ['Fiction'])).toEqual(['Fiction'])
+    expect(mergeGenres(['Fiction'], undefined)).toEqual(['Fiction'])
+  })
+})
+
+describe('mergePairs', () => {
+  it('keeps the new front pair at index 0 of both columns when re-committing a swapped product', () => {
+    const merged = mergePairs(
+      ['frontD', 'backD'],
+      ['frontC', 'backC'],
+      ['backD', 'frontD'],
+      ['backC', 'frontC'],
+    )
+    expect(merged.images).toEqual(['frontD', 'backD'])
+    expect(merged.thumbnails).toEqual(['frontC', 'backC'])
+  })
+
+  it('stays index-aligned when a thumbnail is missing for a detail', () => {
+    const merged = mergePairs(['frontD', 'backD'], ['frontC'], ['oldD'], ['oldC'])
+    expect(merged.images).toEqual(['frontD', 'backD', 'oldD'])
+    expect(merged.thumbnails).toEqual(['frontC', null, 'oldC'])
+  })
+
+  it('dedups by detail URL, keeping the first pair', () => {
+    const merged = mergePairs(['aD'], ['aC'], ['aD', 'bD'], ['aC-stale', 'bC'])
+    expect(merged.images).toEqual(['aD', 'bD'])
+    expect(merged.thumbnails).toEqual(['aC', 'bC'])
+  })
+
+  it('pads legacy rows whose thumbnails array is shorter than images', () => {
+    const merged = mergePairs(null, null, ['x1', 'x2', 'x3'], ['y1'])
+    expect(merged.images).toEqual(['x1', 'x2', 'x3'])
+    expect(merged.thumbnails).toEqual(['y1', null, null])
+  })
+
+  it('handles empty and missing inputs', () => {
+    expect(mergePairs(undefined, undefined, undefined, undefined)).toEqual({ images: [], thumbnails: [] })
+    expect(mergePairs([], [], [], [])).toEqual({ images: [], thumbnails: [] })
+  })
+
+  it('appends when placement is back so a late back-only commit cannot hijack index 0', () => {
+    const merged = mergePairs(['backD'], ['backC'], ['frontD'], ['frontC'], 'back')
+    expect(merged.images).toEqual(['frontD', 'backD'])
+    expect(merged.thumbnails).toEqual(['frontC', 'backC'])
+  })
+
+  it('prepends by default so a late front commit leads', () => {
+    const merged = mergePairs(['frontD'], ['frontC'], ['backD'], ['backC'], 'front')
+    expect(merged.images).toEqual(['frontD', 'backD'])
+    expect(merged.thumbnails).toEqual(['frontC', 'backC'])
   })
 })

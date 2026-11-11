@@ -7,17 +7,25 @@ import { closePool } from './db.mjs'
 import { attachConsoleRenderer } from './progress.mjs'
 
 function usage() {
-  console.error('usage: node src/run.mjs <folder> [--dry-run] [--limit N] [--force] [--web]')
+  console.error('usage: node src/run.mjs <folder> [--dry-run] [--limit N] [--force] [--web] [--no-enrich] [--stop-at PHASE]')
 }
 
 function parseArgs(argv) {
-  const args = { folder: null, dryRun: false, limit: 0, force: false, web: false }
+  const args = { folder: null, dryRun: false, limit: 0, force: false, web: false, autoEnrich: true, stopAt: null }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--dry-run') args.dryRun = true
     else if (a === '--force') args.force = true
     else if (a === '--web') args.web = true
-    else if (a === '--limit') {
+    else if (a === '--no-enrich') args.autoEnrich = false
+    else if (a === '--stop-at') {
+      args.stopAt = argv[++i]
+      if (!['crop', 'ocr', 'match', 'enrich', 'complete'].includes(args.stopAt)) {
+        console.error('--stop-at requires one of: crop, ocr, match, enrich, complete')
+        usage()
+        process.exit(1)
+      }
+    } else if (a === '--limit') {
       const n = parseInt(argv[++i], 10)
       if (!Number.isFinite(n) || n < 1) {
         console.error('--limit requires a positive integer')
@@ -135,6 +143,8 @@ async function main() {
       limit: args.limit,
       state,
       retryFailed: false,
+      autoEnrich: args.autoEnrich,
+      stopAt: args.stopAt,
     })
   } finally {
     detachProgress()

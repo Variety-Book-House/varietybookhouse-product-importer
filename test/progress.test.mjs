@@ -37,7 +37,7 @@ describe('progress phases', () => {
     expect(snap.done).toBe(false)
   })
 
-  it('reports fraction for the active phase', () => {
+  it('reports fraction for the is_active phase', () => {
     const p = new Progress({ phase: 'crop', total: 4 })
     p.step()
     p.step()
@@ -95,7 +95,7 @@ describe('progress phases', () => {
 })
 
 describe('progress eta and timing', () => {
-  it('estimates remaining time from the observed rate of the active phase', () => {
+  it('estimates remaining time from the observed rate of the is_active phase', () => {
     const c = clock(1000)
     const p = new Progress({ phase: 'ocr', total: 4, now: c.now })
     p.step()
@@ -152,7 +152,7 @@ describe('progress events', () => {
 })
 
 describe('singleton progress state', () => {
-  it('exposes the active snapshot through getProgress and ends on demand', () => {
+  it('exposes the is_active snapshot through getProgress and ends on demand', () => {
     expect(getProgress()).toBeNull()
     const p = startProgress({ phase: 'commit', total: 2 })
     expect(getProgress().phase).toBe('commit')
@@ -172,8 +172,8 @@ describe('singleton progress state', () => {
   })
 
   it('falls back to the console for log lines when no renderer is attached', () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const log = vi.spyOn(console, 'log').mockImplementation(() => { })
+    const err = vi.spyOn(console, 'error').mockImplementation(() => { })
     try {
       const p = startProgress({ phase: 'commit', total: 1 })
       p.log('committed "Dune" → p1')
@@ -228,7 +228,7 @@ describe('console renderer', () => {
   })
 
   it('lets log lines through the renderer without leaving the bar on screen', () => {
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const log = vi.spyOn(console, 'log').mockImplementation(() => { })
     const stream = fakeStream(true)
     const p = startProgress({ phase: 'commit', total: 1 })
     const detach = attachConsoleRenderer({ stream })

@@ -359,5 +359,41 @@ describe('web.mjs', () => {
       })
       expect(res.status).toBe(404)
     })
+
+    it('POST /api/image/:sha/position persists the override (ungroupable image → no rebuild)', async () => {
+      const res = await fetch(`${base}/api/image/${FAILED_SHA}/position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: 'back' }),
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.position).toBe('back')
+      expect(body.bookKey).toBe(null)
+      expect(JSON.parse(await readFile(stateFile(), 'utf8')).images[FAILED_SHA].positionOverride).toBe('back')
+
+      const auto = await fetch(`${base}/api/image/${FAILED_SHA}/position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: 'auto' }),
+      })
+      expect(auto.status).toBe(200)
+      expect(JSON.parse(await readFile(stateFile(), 'utf8')).images[FAILED_SHA].positionOverride).toBe(null)
+    })
+
+    it('POST /api/image/:sha/position validates input', async () => {
+      const bad = await fetch(`${base}/api/image/${FAILED_SHA}/position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: 'sideways' }),
+      })
+      expect(bad.status).toBe(400)
+      const missing = await fetch(`${base}/api/image/${'e'.repeat(64)}/position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position: 'front' }),
+      })
+      expect(missing.status).toBe(404)
+    })
   })
 })

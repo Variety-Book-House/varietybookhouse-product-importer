@@ -67,6 +67,11 @@ export async function commitConfirmed({ state, progress: given = null }) {
 
         const newImages = [frontDetail, ...(backDetail ? [backDetail] : [])]
         const newThumbnails = [frontCard, ...(backCard ? [backCard] : [])]
+        // Where this book's covers belong relative to covers already on the
+        // product (front/back of the same book can arrive in different commits —
+        // e.g. front grouped by title, back matched by shop code). A book whose
+        // leading cover is actually a back must APPEND, never hijack index 0.
+        const placement = (frontEntry.positionOverride ?? frontEntry.ocr?.position) || 'front'
 
         progress.setMessage(`${book.title || book.key} — writing to database`)
         await commitBook({
@@ -74,7 +79,9 @@ export async function commitConfirmed({ state, progress: given = null }) {
           newImages,
           newThumbnails,
           isbn: book.isbn || null,
+          genre: book.genres ?? book.enrich?.genres ?? [],
           orientation: 'portrait',
+          placement,
         })
 
         state.setBook(book.key, {

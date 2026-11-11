@@ -5,6 +5,7 @@ export const PHASE_LABELS = {
   crop: 'Analyzing image',
   ocr: 'Reading text (barcode + OCR)',
   match: 'Matching against catalog',
+  enrich: 'Fetching ISBN details + descriptions',
   commit: 'Committing to database',
 }
 
@@ -30,7 +31,7 @@ export class Progress {
     this.id = ++Progress.seq
     this.label = label
     this.now = now
-    this.active = phase
+    this.is_active = phase
     this.message = ''
     this.plan = [{ phase, total: Math.max(0, Number(total) || 0) }]
     this.totals = { [phase]: Math.max(0, Number(total) || 0) }
@@ -87,7 +88,7 @@ export class Progress {
     if (!this.plan.some((s) => s.phase === phase)) this.plan.push({ phase, total: this.totals[phase] ?? 0 })
     if (this.completed[phase] == null) this.completed[phase] = 0
     if (this.firstSeen[phase] == null) this.firstSeen[phase] = this.now()
-    this.active = phase
+    this.is_active = phase
     if (message) this.message = message
     return this.touch()
   }
@@ -98,12 +99,12 @@ export class Progress {
   }
 
   advance() {
-    this.completed[this.active] = (this.completed[this.active] ?? 0) + 1
+    this.completed[this.is_active] = (this.completed[this.is_active] ?? 0) + 1
     return this.touch()
   }
 
   step({ ok = true } = {}) {
-    this.completed[this.active] = (this.completed[this.active] ?? 0) + 1
+    this.completed[this.is_active] = (this.completed[this.is_active] ?? 0) + 1
     if (ok) this.succeeded++
     else this.failed++
     return this.touch()
@@ -128,7 +129,7 @@ export class Progress {
 
   snapshot() {
     const end = this.finishedAt ?? this.now()
-    const phase = this.active
+    const phase = this.is_active
     const current = this.completed[phase] ?? 0
     const total = this.totals[phase] ?? 0
     const overallTotal = this.plan.reduce((n, s) => n + (this.totals[s.phase] ?? s.total ?? 0), 0)
@@ -185,7 +186,7 @@ export function getProgress() {
   return current ? current.snapshot() : null
 }
 
-export function getActiveProgress() {
+export function getis_activeProgress() {
   return current
 }
 
@@ -221,7 +222,7 @@ export function attachConsoleRenderer({ stream = process.stderr } = {}) {
 
   function render() {
     const snapshot = getProgress()
-    const tracker = getActiveProgress()
+    const tracker = getis_activeProgress()
     if (tracker !== bound) {
       boundOff?.()
       boundOff = tracker ? tracker.onUpdate(render) : null

@@ -95,6 +95,7 @@
   }
   .head-right { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
   .pill {
     display: inline-flex;
     align-items: center;
@@ -132,7 +133,7 @@
     font-weight: 550;
   }
   .tab:hover { color: var(--text); background: transparent; }
-  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .tab.is_active { color: var(--text); border-bottom-color: var(--accent); }
   .tab .count {
     display: inline-block;
     min-width: 20px;
@@ -144,7 +145,7 @@
     margin-left: 6px;
     color: var(--muted);
   }
-  .tab.active .count { background: var(--accent-dim); color: var(--text); }
+  .tab.is_active .count { background: var(--accent-dim); color: var(--text); }
 
   .cards { display: flex; flex-direction: column; gap: 16px; }
   .card {
@@ -208,9 +209,22 @@
     font-size: 11px;
     padding: 4px 6px;
   }
-  .thumb .src-toggle.active {
+  .thumb .src-toggle.is_active {
     border-color: var(--warn, #b8860b);
     color: var(--warn, #b8860b);
+  }
+  .thumb .pos-toggle { display: flex; gap: 4px; justify-content: center; margin-top: 5px; }
+  .thumb .pos-btn { font-size: 10px; padding: 2px 8px; border-radius: 999px; }
+  .thumb .pos-btn.is_active { border-color: var(--accent); color: var(--accent); background: rgba(79, 140, 255, 0.08); }
+  .enrich { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #444; }
+  .genres { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+  .genre-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    border-radius: 10px;
+    border: 1px solid #555;
+    color: #bbb;
   }
   .ocr { padding: 18px; min-width: 0; }
   .ocr h2 {
@@ -267,6 +281,19 @@
   .status-pill.unmatched { color: var(--muted); border-color: var(--border); background: var(--panel-2); }
   .status-pill.committed { color: var(--green); border-color: #2c5a3e; background: var(--green-dim); }
   .status-pill.failed { color: var(--red); border-color: #4a2826; background: var(--red-dim); }
+
+  .code-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    border-radius: 999px;
+    padding: 2px 10px;
+    border: 1px solid var(--accent-dim);
+    color: var(--accent);
+    background: rgba(79, 140, 255, 0.08);
+    white-space: nowrap;
+  }
+  .code-badge.unresolved { color: var(--amber); border-color: #5a4620; background: var(--amber-dim); }
 
   .card-actions {
     padding: 14px 18px;
@@ -343,6 +370,57 @@
     padding: 7px 10px;
   }
   .create-form input:focus { outline: none; border-color: var(--accent); }
+
+  .create-wrap {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--panel-2);
+  }
+  .create-wrap > summary.create-label { cursor: pointer; list-style: none; user-select: none; }
+  .create-wrap > summary.create-label::-webkit-details-marker { display: none; }
+  .create-wrap > summary.create-label::after { content: ' ▸'; color: var(--faint); }
+  .create-wrap[open] > summary.create-label::after { content: ' ▾'; }
+  .create-wrap[open] > .create-inner { margin-top: 8px; }
+  .create-wrap .create-form { border: none; background: transparent; padding: 0; }
+
+  .crop-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .crop-modal { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; max-width: min(94vw, 880px); max-height: 94vh; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .crop-modal > .crop-bar { width: 100%; }
+  .crop-stage { position: relative; display: inline-block; line-height: 0; touch-action: none; user-select: none; }
+  .crop-stage img { display: block; max-width: 100%; max-height: 72vh; -webkit-user-drag: none; }
+  .crop-rect { position: absolute; border: 2px solid var(--accent); box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5); cursor: move; }
+  .crop-handle { position: absolute; width: 14px; height: 14px; background: var(--accent); border: 2px solid #fff; border-radius: 3px; z-index: 2; }
+  .crop-handle.nw { left: -9px; top: -9px; cursor: nwse-resize; }
+  .crop-handle.ne { right: -9px; top: -9px; cursor: nesw-resize; }
+  .crop-handle.sw { left: -9px; bottom: -9px; cursor: nesw-resize; }
+  .crop-handle.se { right: -9px; bottom: -9px; cursor: nwse-resize; }
+  .crop-bar { display: flex; gap: 8px; align-items: center; line-height: 1.4; }
+  .crop-hint { font-size: 12px; color: var(--muted); }
+
+  .search-wrap {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: var(--panel-2);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input {
+    flex: 1;
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 7px 10px;
+  }
+  .search-row input:focus { outline: none; border-color: var(--accent); }
+  .search-results { border: 0; padding: 0; background: transparent; }
+  .search-empty { font-size: 12px; color: var(--faint); padding: 6px 2px; }
   .folder-input-row {
     display: grid;
     grid-template-columns: 1fr auto auto;
@@ -536,7 +614,9 @@
         <span class="pill" id="pill-ocr"><span class="dot"></span><span>OCR …</span></span>
         <span class="pill" id="pill-db"><span class="dot"></span><span>DB …</span></span>
         <span class="pill" id="pill-r2"><span class="dot"></span><span>R2 …</span></span>
+        <span class="pill" id="pill-llm"><span class="dot"></span><span>LLM …</span></span>
       </div>
+      <button class="danger" id="btn-stop-job" type="button" hidden>Stop job</button>
       <button class="ghost" id="btn-change-folder" type="button">Select image folder</button>
       <button class="ghost" id="btn-refresh" type="button">Refresh</button>
       <button class="primary" id="btn-commit" type="button">Commit to database</button>
@@ -592,7 +672,7 @@
   'use strict';
 
   var state = null;
-  var activeTab = 'matched';
+  var is_activeTab = 'matched';
   var busy = false;
   var lastUpdated = 0;
   var refreshQueued = false;
@@ -607,6 +687,8 @@
     { id: 'matched', label: 'Matched', match: function (b) { return b.status === 'matched' || b.status === 'created' || b.status === 'committed'; } },
     { id: 'review', label: 'Review', match: function (b) { return b.status === 'needs_review'; } },
     { id: 'unmatched', label: 'Unmatched', match: function (b) { return b.status === 'unmatched'; } },
+    { id: 'pending', label: 'Not committed', match: function (b) { return b.status !== 'committed'; } },
+    { id: 'committed', label: 'Committed', match: function (b) { return b.status === 'committed'; } },
     { id: 'failed', label: 'Failed', match: null },
     { id: 'all', label: 'All', match: function () { return true; } }
   ];
@@ -841,6 +923,7 @@
     }
 
     startBtn.onclick = function() { startJob(browserPath); };
+  document.getElementById('btn-stop-job').onclick = stopJob;
   }
 
   async function startJob(folder) {
@@ -867,6 +950,19 @@
     }
   }
 
+  async function stopJob() {
+    var btn = document.getElementById('btn-stop-job');
+    btn.textContent = 'Stopping…';
+    try {
+      await api('/api/stop-job', { method: 'POST' });
+      toast('Job stopped');
+      btn.hidden = true;
+      document.getElementById('btn-start-here').disabled = false;
+    } catch (e) {
+      toast('Failed to stop job: ' + e.message);
+    }
+  }
+
   function setPill(id, ok, label, warn) {
     var pill = document.getElementById(id);
     var dot = pill.querySelector('.dot');
@@ -878,11 +974,12 @@
   function counts() {
     var books = state ? state.books : [];
     var failed = state ? state.images.filter(function (i) { return i.status === 'failed'; }).length : 0;
-    var c = { matched: 0, review: 0, unmatched: 0, all: books.length, failed: failed };
+    var c = { matched: 0, review: 0, unmatched: 0, pending: 0, committed: 0, all: books.length, failed: failed };
     books.forEach(function (b) {
       if (b.status === 'matched' || b.status === 'created' || b.status === 'committed') c.matched++;
       if (b.status === 'needs_review') c.review++;
       if (b.status === 'unmatched') c.unmatched++;
+      if (b.status === 'committed') c.committed++; else c.pending++;
     });
     return c;
   }
@@ -903,6 +1000,13 @@
     setPill('pill-db', !!state.db.ok, state.db.ok ? 'DB ok' : 'DB down', false);
     setPill('pill-r2', !!state.r2.ok, state.r2.ok ? 'R2 ok' : 'R2 missing', true);
 
+    var llm = state.llm || {};
+    var llmOk = !!llm.ok;
+    var llmLabel = llmOk
+      ? 'LLM ready · ' + (llm.model || state.enrichModel || '?') + (llm.hasModel === false ? ' (not pulled)' : '')
+      : 'LLM offline (enrich falls back)';
+    setPill('pill-llm', llmOk, llmLabel, true);
+
     var n = committable().length;
     var btn = document.getElementById('btn-commit');
     btn.disabled = busy || state.dryRun || n === 0;
@@ -920,14 +1024,14 @@
     TABS.forEach(function (t) {
       var n = t.id === 'failed' ? c.failed : c[t.id];
       var tab = h('button', {
-        class: 'tab' + (activeTab === t.id ? ' active' : ''),
+        class: 'tab' + (is_activeTab === t.id ? ' is_active' : ''),
         type: 'button'
       }, [
         t.label,
         h('span', { class: 'count', text: String(n) })
       ]);
       tab.addEventListener('click', function () {
-        activeTab = t.id;
+        is_activeTab = t.id;
         renderTabs();
         renderContent();
       });
@@ -966,6 +1070,7 @@
   function positionFor(book, which) {
     var imgs = state.bySha || {};
     var img = which === 'front' ? (book.front ? imgs[book.front] : null) : (book.back ? imgs[book.back] : null);
+    if (img && img.positionOverride) return img.positionOverride;
     if (img && img.ocr && img.ocr.position) return img.ocr.position;
     return which;
   }
@@ -982,6 +1087,7 @@
     var fig = h('div', { class: 'thumb' });
     if (sha) {
       var src = '/img/' + sha + (entry && entry.useOriginal ? '?src=orig' : '');
+      if (entry && !entry.useOriginal && cropVersion[sha]) src += '?v=' + cropVersion[sha];
       var img = h('img', { src: src, alt: which + ' cover of ' + book.title, loading: 'lazy' });
       img.addEventListener('error', function () {
         img.outerHTML = '<div class="no-cover">image unavailable</div>';
@@ -989,7 +1095,7 @@
       fig.appendChild(img);
       var usingOriginal = !!(entry && entry.useOriginal);
       var toggle = h('button', {
-        class: 'small src-toggle' + (usingOriginal ? ' active' : ''),
+        class: 'small src-toggle' + (usingOriginal ? ' is_active' : ''),
         type: 'button',
         text: usingOriginal ? 'Using original ✓' : 'Use original'
       });
@@ -1010,12 +1116,210 @@
         });
       });
       fig.appendChild(toggle);
+      if (entry) {
+        var cropBtn = h('button', {
+          class: 'small src-toggle' + (entry.manualCrop ? ' is_active' : ''),
+          type: 'button',
+          text: entry.manualCrop ? 'Cropped ✓ edit' : 'Crop ✂'
+        });
+        cropBtn.addEventListener('click', function () { openCropModal(sha); });
+        fig.appendChild(cropBtn);
+      }
     } else {
       fig.appendChild(h('div', { class: 'no-cover', text: 'no back cover' }));
     }
     var code = entry && entry.barcode && entry.barcode.shopCode ? ' · ' + entry.barcode.shopCode : '';
     fig.appendChild(h('div', { class: 'pos', text: positionFor(book, which) + code }));
+    if (entry) {
+      var effPos = entry.positionOverride || (entry.ocr && entry.ocr.position) || which;
+      var posWrap = h('div', { class: 'pos-toggle' });
+      ['front', 'back'].forEach(function (role) {
+        var b = h('button', {
+          class: 'small pos-btn' + (effPos === role ? ' is_active' : ''),
+          type: 'button',
+          text: role
+        });
+        b.addEventListener('click', function () { setPosition(sha, role); });
+        posWrap.appendChild(b);
+      });
+      if (entry.positionOverride) {
+        var a = h('button', { class: 'small pos-btn auto', type: 'button', text: 'auto ↺' });
+        a.addEventListener('click', function () { setPosition(sha, 'auto'); });
+        posWrap.appendChild(a);
+      }
+      fig.appendChild(posWrap);
+      if (entry.splitKey || (book.front && book.back)) {
+        var splitWrap = h('div', { class: 'pos-toggle' });
+        var sb;
+        if (entry.splitKey) {
+          sb = h('button', { class: 'small pos-btn', type: 'button', text: 'merge ↩' });
+          sb.addEventListener('click', function () { splitBook(sha, 'merge'); });
+        } else {
+          sb = h('button', { class: 'small pos-btn', type: 'button', text: '⤳ another book' });
+          sb.addEventListener('click', function () { splitBook(sha, 'out'); });
+        }
+        splitWrap.appendChild(sb);
+        fig.appendChild(splitWrap);
+      }
+    }
     return fig;
+  }
+
+  function setPosition(sha, position) {
+    api('/api/image/' + sha + '/position', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: position })
+    }).then(function () {
+      return loadState();
+    }).catch(function (e) {
+      alert('could not change position: ' + e.message);
+    });
+  }
+
+  function splitBook(sha, action) {
+    api('/api/image/' + sha + '/split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: action })
+    }).then(function () {
+      return loadState();
+    }).catch(function (e) {
+      alert('could not ' + action + ': ' + e.message);
+    });
+  }
+
+  var cropVersion = {};
+
+  function openCropModal(sha) {
+    var imgs = state.bySha || {};
+    var entry = imgs[sha];
+    if (!entry) return;
+    var clamp = function (v, lo, hi) { return Math.min(Math.max(v, lo), hi); };
+    var box = entry.manualCrop
+      ? { x0: entry.manualCrop.x0, y0: entry.manualCrop.y0, x1: entry.manualCrop.x1, y1: entry.manualCrop.y1 }
+      : { x0: 0.03, y0: 0.03, x1: 0.97, y1: 0.97 };
+
+    var overlay = h('div', { class: 'crop-overlay' });
+    var modal = h('div', { class: 'crop-modal' });
+    var stage = h('div', { class: 'crop-stage' });
+    var img = h('img', { src: '/img/' + sha + '?src=orig', alt: 'crop target ' + (entry.file || sha) });
+    img.draggable = false;
+    var rect = h('div', { class: 'crop-rect' });
+    var handles = {};
+    ['nw', 'ne', 'sw', 'se'].forEach(function (k) {
+      handles[k] = h('div', { class: 'crop-handle ' + k });
+      rect.appendChild(handles[k]);
+    });
+    stage.appendChild(img);
+    stage.appendChild(rect);
+
+    function layout() {
+      rect.style.left = (box.x0 * 100) + '%';
+      rect.style.top = (box.y0 * 100) + '%';
+      rect.style.width = ((box.x1 - box.x0) * 100) + '%';
+      rect.style.height = ((box.y1 - box.y0) * 100) + '%';
+    }
+    layout();
+
+    var MIN = 0.02;
+    var drag = null;
+    stage.addEventListener('pointerdown', function (e) {
+      var mode = null;
+      for (var k in handles) { if (e.target === handles[k]) { mode = k; break; } }
+      if (!mode && e.target === rect) mode = 'move';
+      if (!mode) return;
+      e.preventDefault();
+      drag = mode === 'move'
+        ? { mode: mode, sx: e.clientX, sy: e.clientY, box: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 } }
+        : { mode: mode };
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var r = img.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      if (drag.mode === 'move') {
+        var w = drag.box.x1 - drag.box.x0, ht = drag.box.y1 - drag.box.y0;
+        var x0 = clamp(drag.box.x0 + (e.clientX - drag.sx) / r.width, 0, 1 - w);
+        var y0 = clamp(drag.box.y0 + (e.clientY - drag.sy) / r.height, 0, 1 - ht);
+        box.x0 = x0; box.y0 = y0; box.x1 = x0 + w; box.y1 = y0 + ht;
+      } else {
+        var x = clamp((e.clientX - r.left) / r.width, 0, 1);
+        var y = clamp((e.clientY - r.top) / r.height, 0, 1);
+        if (drag.mode.indexOf('w') >= 0) box.x0 = Math.min(x, box.x1 - MIN);
+        if (drag.mode.indexOf('e') >= 0) box.x1 = Math.max(x, box.x0 + MIN);
+        if (drag.mode.indexOf('n') >= 0) box.y0 = Math.min(y, box.y1 - MIN);
+        if (drag.mode.indexOf('s') >= 0) box.y1 = Math.max(y, box.y0 + MIN);
+      }
+      layout();
+    });
+    ['pointerup', 'pointercancel'].forEach(function (ev) {
+      stage.addEventListener(ev, function () { drag = null; });
+    });
+
+    var bar = h('div', { class: 'crop-bar' });
+    bar.appendChild(h('div', { class: 'crop-hint', text: 'drag the corners or the box — straight crop only, no deskew' }));
+    bar.appendChild(h('span', { class: 'grow' }));
+    var closeBtn = h('button', { class: 'small', type: 'button', text: 'Cancel' });
+    var saveBtn = h('button', { class: 'small', type: 'button', text: 'Apply crop' });
+    bar.appendChild(closeBtn);
+    if (entry.manualCrop) {
+      var resetBtn = h('button', { class: 'danger small', type: 'button', text: 'Reset to auto crop' });
+      resetBtn.addEventListener('click', function () {
+        resetBtn.disabled = true;
+        api('/api/image/' + sha + '/crop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reset: true })
+        }).then(function (res) {
+          entry.manualCrop = null;
+          cropVersion[sha] = res.v || Date.now();
+          close();
+          render();
+        }).catch(function (e) {
+          resetBtn.disabled = false;
+          alert('reset failed: ' + e.message);
+        });
+      });
+      bar.appendChild(resetBtn);
+    }
+    bar.appendChild(saveBtn);
+
+    function close() {
+      document.removeEventListener('keydown', onKey);
+      overlay.remove();
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('pointerdown', function (e) { if (e.target === overlay) close(); });
+    closeBtn.addEventListener('click', close);
+    saveBtn.addEventListener('click', function () {
+      saveBtn.disabled = true;
+      api('/api/image/' + sha + '/crop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 })
+      }).then(function (res) {
+        var live = (state.bySha || {})[sha] || entry;
+        if (live) {
+          live.manualCrop = res.manualCrop;
+          if (res.dims) live.dims = res.dims;
+        }
+        cropVersion[sha] = res.v || Date.now();
+        close();
+        render();
+      }).catch(function (e) {
+        saveBtn.disabled = false;
+        alert('crop failed: ' + e.message);
+      });
+    });
+
+    modal.appendChild(h('div', { class: 'create-label', text: 'Crop ' + (entry.file || sha) }));
+    modal.appendChild(stage);
+    modal.appendChild(bar);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   }
 
   function candidateRow(book, cand, rank) {
@@ -1057,14 +1361,102 @@
     return wrap;
   }
 
-  function createForm(book) {
+  var searchStore = {};
+
+  function searchSection(book) {
+    var st = searchStore[book.key] || (searchStore[book.key] = { q: '', results: null, loading: false, error: '' });
+    var wrap = h('div', { class: 'search-wrap' });
+    wrap.appendChild(h('div', { class: 'create-label', text: 'Search catalogue' }));
+    var row = h('div', { class: 'search-row' });
+    var input = h('input', { type: 'text', placeholder: 'title, author or ISBN', value: st.q });
+    input.addEventListener('input', function () { st.q = input.value; });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); run(); } });
+    var btn = h('button', { class: 'small', type: 'button', text: st.loading ? 'Searching…' : 'Search' });
+    btn.disabled = st.loading;
+    btn.addEventListener('click', run);
+    row.appendChild(input);
+    row.appendChild(btn);
+    wrap.appendChild(row);
+    var list = h('div', { class: 'candidates search-results' });
+    if (st.error) list.appendChild(h('div', { class: 'search-empty', text: st.error }));
+    else if (st.results) {
+      if (!st.results.length) list.appendChild(h('div', { class: 'search-empty', text: 'no catalogue matches' }));
+      st.results.forEach(function (prod) { list.appendChild(searchResultRow(book, prod)); });
+    }
+    wrap.appendChild(list);
+    return wrap;
+
+    function run() {
+      var q = st.q.trim();
+      if (q.length < 2) return;
+      st.loading = true;
+      st.error = '';
+      render();
+      api('/api/search?q=' + encodeURIComponent(q)).then(function (res) {
+        st.results = (res && res.products) || [];
+      }).catch(function (e) {
+        st.error = 'search failed: ' + e.message;
+      }).finally(function () {
+        st.loading = false;
+        render();
+      });
+    }
+  }
+
+  function searchResultRow(book, cand) {
+    var chosen = book.chosenProductId === cand.id;
+    var row = h('div', { class: 'candidate' });
+    var info = h('div', {}, [
+      h('div', { class: 'cand-title', text: cand.title || '(untitled)' }),
+      h('div', { class: 'cand-author', text: cand.author ? '— ' + cand.author : '' }),
+      h('div', { class: 'cand-author', text: cand.isbn ? 'ISBN ' + cand.isbn : '' })
+    ]);
+    row.appendChild(info);
+    row.appendChild(h('div', { class: 'mrp', text: fmtPrice(cand.mrp) }));
+    if (chosen) row.appendChild(h('span', { class: 'status-pill committed', text: 'chosen' }));
+    else {
+      var use = h('button', { class: 'small', type: 'button', text: 'Use' });
+      use.addEventListener('click', function () { pickCandidate(book, cand); });
+      row.appendChild(use);
+    }
+    return row;
+  }
+
+  var createStore = {};
+  var createFocus = null;
+
+  function createSection(book) {
+    // default open when there's nothing to pick from; remember the user's toggle across re-renders
+    var autoOpen = !book.candidates || book.candidates.length === 0 || book.status === 'unmatched';
+    var st = createStore[book.key] || (createStore[book.key] = { open: autoOpen });
+    var wrap = h('details', { class: 'create-wrap', 'data-book-key': book.key });
+    if (st.open) wrap.setAttribute('open', '');
+    wrap.appendChild(h('summary', { class: 'create-label', text: 'Create new product' }));
+    var inner = h('div', { class: 'create-inner' });
+    inner.appendChild(createForm(book, st));
+    wrap.appendChild(inner);
+    wrap.addEventListener('toggle', function () { st.open = wrap.open; });
+    return wrap;
+  }
+
+  function createForm(book, st) {
+    st.draft = st.draft || {};
     var form = h('form', { class: 'create-form' });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       createProduct(book, form);
     });
     function field(name, value, ph) {
-      var input = h('input', { name: name, type: 'text', value: value == null ? '' : String(value), placeholder: ph || '' });
+      var v = Object.prototype.hasOwnProperty.call(st.draft, name)
+        ? st.draft[name]
+        : (value == null ? '' : String(value));
+      var input = h('input', { name: name, type: 'text', value: v, placeholder: ph || '' });
+      input.addEventListener('input', function () { st.draft[name] = input.value; });
+      input.addEventListener('focus', function () { createFocus = { key: book.key, name: name }; });
+      input.addEventListener('blur', function (e) {
+        var to = e.relatedTarget;
+        if (!(to && to.tagName === 'INPUT' && to.closest('form') === form)) createFocus = null;
+      });
       return h('label', {}, [h('span', { text: name }), input]);
     }
     form.appendChild(field('title', book.title, 'Book title'));
@@ -1091,6 +1483,10 @@
     var h2 = h('h2');
     h2.appendChild(h('span', { text: book.title || '(untitled)' }));
     h2.appendChild(statusPill(book.status));
+    if (book.shopCode) h2.appendChild(h('span', {
+      class: 'code-badge' + (book.shopCodeUnresolved ? ' unresolved' : ''),
+      text: 'CODE ' + book.shopCode + (book.shopCodeUnresolved ? ' · not in csv' : '')
+    }));
     if (book.score) h2.appendChild(h('span', { class: 'score', text: 'score ' + book.score }));
     title.appendChild(h2);
     ocr.appendChild(title);
@@ -1125,6 +1521,37 @@
       ocr.appendChild(p);
       ocr.appendChild(h('div', { class: 'blurb-hint', text: 'click to expand' }));
     }
+
+    if (book.enrich && !book.enrich.error) {
+      var emeta = book.enrich;
+      var enrichBox = h('div', { class: 'enrich' });
+      enrichBox.appendChild(h('span', { class: 'status-pill ' + (emeta.provider || 'none'), text: emeta.provider || 'meta' }));
+      var details = [];
+      if (emeta.authors && emeta.authors.length) details.push(emeta.authors.join(', '));
+      details.push([emeta.publisher, emeta.year, emeta.pageCount ? emeta.pageCount + ' pp' : ''].filter(Boolean).join(' · '));
+      if (details.filter(Boolean).length) {
+        enrichBox.appendChild(h('div', { class: 'author', text: details.filter(Boolean).join(' — ') }));
+      }
+      if (emeta.genres && emeta.genres.length) {
+        var gwrap = h('div', { class: 'genres' });
+        emeta.genres.forEach(function (g) { gwrap.appendChild(h('span', { class: 'genre-chip', text: g })); });
+        enrichBox.appendChild(gwrap);
+      }
+      if (emeta.description) {
+        var edesc = h('p', { class: 'blurb', text: emeta.description });
+        edesc.addEventListener('click', function () { edesc.classList.toggle('expanded'); });
+        enrichBox.appendChild(edesc);
+        var eSource = emeta.descriptionSource === 'generated'
+          ? 'description generated by ' + (emeta.descriptionModel || 'LLM')
+          : emeta.descriptionSource === 'provider'
+            ? 'description from provider'
+            : '';
+        if (eSource) enrichBox.appendChild(h('div', { class: 'blurb-hint', text: eSource }));
+      } else {
+        enrichBox.appendChild(h('div', { class: 'author', text: 'no description available' }));
+      }
+      ocr.appendChild(enrichBox);
+    }
     top.appendChild(ocr);
     card.appendChild(top);
 
@@ -1143,11 +1570,27 @@
 
     if (book.status !== 'committed' && !book.dismissed) {
       if (book.candidates && book.candidates.length > 0) actions.appendChild(candidatesSection(book));
-      if ((!book.candidates || book.candidates.length === 0) || book.status === 'unmatched') {
-        actions.appendChild(h('div', { class: 'create-label', text: 'Create new product' }));
-        actions.appendChild(createForm(book));
-      }
+      actions.appendChild(searchSection(book));
+      actions.appendChild(createSection(book));
       var row = h('div', { class: 'action-row' });
+      if (book.isbn && (!book.enrich || book.enrich.error || !book.enrich.description)) {
+        var enrichBtn = h('button', { class: 'small', type: 'button', text: busy ? 'Enriching…' : 'Enrich from ISBN' });
+        enrichBtn.disabled = busy;
+        enrichBtn.addEventListener('click', function () {
+          withBusy(async function () {
+            var key = encodeURIComponent(book.key);
+            await api('/api/book/' + key + '/enrich', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({})
+            });
+          });
+        });
+        row.appendChild(enrichBtn);
+        if (book.enrich && book.enrich.error) {
+          row.appendChild(h('span', { class: 'dismissed-note', text: book.enrich.error }));
+        }
+      }
       if (book.matchReason) row.appendChild(h('span', { class: 'dismissed-note', text: book.matchReason }));
       row.appendChild(h('span', { class: 'grow' }));
       var reject = h('button', { class: 'danger small', type: 'button', text: 'Reject' });
@@ -1179,7 +1622,7 @@
     box.innerHTML = '';
     if (!state) return;
 
-    if (activeTab === 'failed') {
+    if (is_activeTab === 'failed') {
       var failed = state.images.filter(function (i) { return i.status === 'failed'; });
       if (failed.length === 0) {
         box.appendChild(emptyMessage('failed'));
@@ -1205,10 +1648,10 @@
       return;
     }
 
-    var tab = TABS.find(function (t) { return t.id === activeTab; });
+    var tab = TABS.find(function (t) { return t.id === is_activeTab; });
     var books = state.books.filter(tab.match);
     if (books.length === 0) {
-      box.appendChild(emptyMessage(activeTab));
+      box.appendChild(emptyMessage(is_activeTab));
       return;
     }
 
@@ -1234,7 +1677,23 @@
     renderHeader();
     renderTabs();
     renderContent();
+    restoreCreateFocus();
     if (!progressTimer) renderProgress(state.progress);
+  }
+
+  // the 8s loadState poll rebuilds every card from scratch; hand focus + caret back to the
+  // create-form input the user was typing in (values themselves live in createStore drafts)
+  function restoreCreateFocus() {
+    if (!createFocus) return;
+    var ae = document.activeElement;
+    if (ae && ae !== document.body && ae.tagName !== 'HTML') { createFocus = null; return; }
+    var sel = '.create-wrap[data-book-key=' + JSON.stringify(createFocus.key) +
+      '] input[name=' + JSON.stringify(createFocus.name) + ']';
+    var el = document.querySelector(sel);
+    createFocus = null;
+    if (!el) return;
+    el.focus();
+    try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* non-text input */ }
   }
 
   async function withBusy(fn) {
@@ -1294,11 +1753,15 @@
       });
       if (data.mrp === '') data.mrp = null;
       var key = encodeURIComponent(book.key);
-      await api('/api/book/' + key + '/create', {
+      var res = await api('/api/book/' + key + '/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
+      if (res && res.catalogueError) toast('product created, but catalogue snapshot not updated: ' + res.catalogueError);
+      var st = createStore[book.key];
+      if (st) st.draft = {};
+      createFocus = null;
     });
   }
 

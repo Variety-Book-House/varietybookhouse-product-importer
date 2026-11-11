@@ -30,23 +30,21 @@ describe('cropWhiteBg', () => {
     expect(meta.format).toBe('jpeg')
   })
 
-  it('rotates a landscape scan into portrait', async () => {
+  it('keeps a landscape scan landscape (no auto-rotation)', async () => {
     const buf = await makeScan(1200, 800, { w: 900, h: 600, top: 100, left: 150 })
     const { width, height } = await cropWhiteBg(buf)
-    expect(height).toBeGreaterThan(width)
-    expect(width).toBeGreaterThanOrEqual(575)
-    expect(width).toBeLessThanOrEqual(625)
-    expect(height).toBeGreaterThanOrEqual(875)
-    expect(height).toBeLessThanOrEqual(925)
+    expect(width).toBeGreaterThan(height)
+    expect(width).toBeGreaterThanOrEqual(875)
+    expect(width).toBeLessThanOrEqual(925)
+    expect(height).toBeGreaterThanOrEqual(575)
+    expect(height).toBeLessThanOrEqual(625)
   })
 
   it('applies EXIF orientation before trimming', async () => {
     const upright = await makeScan(600, 900, { w: 400, h: 600, top: 150, left: 100 })
-    const withExif = await sharp(upright)
-      .rotate(90, { angle: 90 })
-      .withMetadata({ orient: 6 })
-      .jpeg({ quality: 95 })
-      .toBuffer()
+    // store the pixels sideways and mark orientation 6 so `.rotate()` must un-rotate them
+    const sideway = await sharp(upright).rotate(-90).jpeg({ quality: 95 }).toBuffer()
+    const withExif = await sharp(sideway).withMetadata({ orientation: 6 }).jpeg({ quality: 95 }).toBuffer()
     const { width, height } = await cropWhiteBg(withExif)
     expect(height).toBeGreaterThan(width)
   })
